@@ -25,6 +25,7 @@ use lnpbp::bp::blind::OutpointReveal;
 use lnpbp::client_side_validation::Conceal;
 use lnpbp::data_format::DataFormat;
 use lnpbp::rgb::prelude::*;
+use lnpbp::strict_encoding::strict_encode;
 
 use super::{Error, OutputFormat, Runtime};
 use crate::api::fungible::{AcceptApi, Issue, TransferApi};
@@ -80,7 +81,7 @@ pub enum Command {
         outpoint: OutPoint,
 
         /// Outpoint blinding factor (generated when the invoice was created)
-        blinding_factor: u32,
+        blinding_factor: u64,
     },
 
     Forget {
@@ -123,9 +124,6 @@ pub struct TransferCli {
 
     /// Fee (in satoshis)
     pub fee: u64,
-
-    /// Change output
-    pub change: OutPoint,
 
     /// File to save consignment to
     pub consignment: PathBuf,
@@ -285,7 +283,7 @@ impl Command {
         mut runtime: Runtime,
         filename: PathBuf,
         outpoint: OutPoint,
-        blinding_factor: u32,
+        blinding_factor: u64,
     ) -> Result<(), Error> {
         use lnpbp::strict_encoding::strict_encode;
 
@@ -301,7 +299,7 @@ impl Command {
             let outpoint_reveal = OutpointReveal {
                 blinding: blinding_factor,
                 txid: outpoint.txid,
-                vout: outpoint.vout as u16,
+                vout: outpoint.vout as u32,
             };
             if outpoint_reveal.conceal() != *outpoint_hash {
                 eprintln!("The provided outpoint and blinding factors does not match outpoint from the consignment");
@@ -463,7 +461,6 @@ impl TransferCli {
                 coins: self.invoice.amount,
                 seal_confidential,
             }],
-            change: self.change,
         };
 
         // TODO: Do tx output reorg for deterministic ordering
@@ -475,6 +472,7 @@ impl TransferCli {
                 eprintln!("Transfer failed: {}", failure);
             }
             Reply::Transfer(transfer) => {
+                trace!("{:?}", strict_encode(&transfer.consignment));
                 transfer.consignment.write_file(self.consignment.clone())?;
                 let out_file = fs::File::create(&self.transaction)
                     .expect("can't create output transaction file");
